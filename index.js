@@ -48,8 +48,8 @@ const commands = [
     )
 ].map(cmd => cmd.toJSON());
 
-// 🔥 Register commands
-client.once('clientReady', async () => {
+// 🔥 FIXED EVENT NAME HERE
+client.once('ready', async () => {
   console.log(`📖 Bible Bot Online: ${client.user.tag}`);
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -62,7 +62,7 @@ client.once('clientReady', async () => {
     );
     console.log("Commands registered!");
   } catch (err) {
-    console.error(err);
+    console.error("Command registration error:", err);
   }
 });
 
