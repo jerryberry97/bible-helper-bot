@@ -1,5 +1,11 @@
 require('dotenv').config();
 
+// ❗ ENV CHECK (prevents silent crashes)
+if (!process.env.TOKEN || !process.env.CLIENT_ID) {
+  console.error("❌ Missing TOKEN or CLIENT_ID");
+  process.exit(1);
+}
+
 // 🌐 EXPRESS SERVER (FOR RENDER UPTIME)
 const express = require('express');
 const app = express();
@@ -48,7 +54,7 @@ const commands = [
     )
 ].map(cmd => cmd.toJSON());
 
-// 🔥 FIXED EVENT NAME HERE
+// 🔥 READY EVENT
 client.once('ready', async () => {
   console.log(`📖 Bible Bot Online: ${client.user.tag}`);
 
@@ -60,89 +66,95 @@ client.once('ready', async () => {
       Routes.applicationCommands(process.env.CLIENT_ID),
       { body: commands }
     );
-    console.log("Commands registered!");
+    console.log("✅ Commands registered!");
   } catch (err) {
-    console.error("Command registration error:", err);
+    console.error("❌ Command registration error:", err);
   }
 });
 
-// ⚡ Command handler
+// ⚡ COMMAND HANDLER (FULL SAFE VERSION)
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   console.log("Command received:", interaction.commandName);
 
-  // 📖 /ref
-  if (interaction.commandName === 'ref') {
-    const reference = interaction.options.getString('reference');
+  try {
+    // 📖 /ref
+    if (interaction.commandName === 'ref') {
+      const reference = interaction.options.getString('reference');
 
-    await interaction.deferReply();
+      await interaction.deferReply();
 
-    try {
       const res = await axios.get(
         `https://bible-api.com/${encodeURIComponent(reference)}?translation=kjv`
       );
 
-      await interaction.editReply(
+      return await interaction.editReply(
         `📖 **${reference} (KJV)**\n${res.data.text}`
       );
-
-    } catch (err) {
-      await interaction.editReply(
-        "⚠️ Error fetching verse. Use format: John 3:16"
-      );
     }
-  }
 
-  // 🔍 /ver (SMART SEARCH)
-  if (interaction.commandName === 'ver') {
-    const input = interaction.options.getString('text').toLowerCase();
+    // 🔍 /ver (OPTIMIZED SEARCH)
+    if (interaction.commandName === 'ver') {
+      const input = interaction.options.getString('text').toLowerCase();
 
-    await interaction.deferReply();
+      await interaction.deferReply();
 
-    const words = input.split(" ").filter(w => w.length > 3);
+      const words = input.split(" ").filter(w => w.length > 3);
 
-    let bestMatch = null;
-    let bestScore = 0;
+      let bestMatch = null;
+      let bestScore = 0;
 
-    for (const book of bible) {
-      for (let c = 0; c < book.chapters.length; c++) {
-        const chapter = book.chapters[c];
+      // ⚡ LIMIT SEARCH (prevents timeout)
+      for (const book of bible.slice(0, 20)) {
+        for (let c = 0; c < book.chapters.length; c++) {
+          const chapter = book.chapters[c];
 
-        for (let v = 0; v < chapter.length; v++) {
-          const verseText = chapter[v].toLowerCase();
+          for (let v = 0; v < chapter.length; v++) {
+            const verseText = chapter[v].toLowerCase();
 
-          let score = 0;
+            let score = 0;
 
-          for (const word of words) {
-            if (verseText.includes(word)) score++;
-          }
+            for (const word of words) {
+              if (verseText.includes(word)) score++;
+            }
 
-          if (score > bestScore) {
-            bestScore = score;
-            bestMatch = {
-              book: book.name,
-              chapter: c + 1,
-              verse: v + 1,
-              text: chapter[v]
-            };
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatch = {
+                book: book.name,
+                chapter: c + 1,
+                verse: v + 1,
+                text: chapter[v]
+              };
+            }
           }
         }
       }
-    }
 
-    if (bestMatch && bestScore >= 2) {
+      if (bestMatch && bestScore >= 2) {
+        return await interaction.editReply(
+          `📖 **${bestMatch.book} ${bestMatch.chapter}:${bestMatch.verse} (KJV)**\n${bestMatch.text}`
+        );
+      }
+
       return await interaction.editReply(
-        `📖 **${bestMatch.book} ${bestMatch.chapter}:${bestMatch.verse} (KJV)**\n${bestMatch.text}`
+        "⚠️ Verse not found.\n💡 Try simpler keywords"
       );
     }
 
-    await interaction.editReply(
-      "⚠️ Verse not found.\n💡 Try key words like: 'God created heaven earth'"
-    );
+  } catch (err) {
+    console.error("❌ COMMAND ERROR:", err);
+
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply("⚠️ Error occurred while processing.");
+    } else {
+      await interaction.reply("⚠️ Error occurred.");
+    }
   }
 });
 
+// 🔐 LOGIN (WITH DEBUG)
 client.login(process.env.TOKEN)
   .then(() => console.log("✅ Login success"))
   .catch(err => console.error("❌ Login failed:", err));
